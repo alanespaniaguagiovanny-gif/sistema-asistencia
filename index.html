@@ -27,7 +27,6 @@
   <button class="tab" id="tabDoc" onclick="switchTab('docente')">Docente</button>
 </div>
 
-
 <main>
   <!-- ESTUDIANTE -->
   <div id="viewEstudiante">
@@ -73,7 +72,7 @@
   <div id="viewDocente" class="hidden">
     <div class="card" id="pinCard">
       <h2>Acceso docente</h2>
-      <p class="lede">Ingresa el PIN para administrar (por defecto: 0000).</p>
+      <p class="lede">Ingresa el PIN para administrar.</p>
       <input id="pinInput" type="password" placeholder="PIN">
       <button class="primary" onclick="checkPin()">Ingresar</button>
       <div id="pinMsg"></div>
@@ -92,7 +91,12 @@
       <div class="card">
         <h2>Panel de asistencia</h2>
         <label>Materia</label>
-        <select id="adminMatSelect" onchange="loadAdminData()"></select>
+        
+        <!-- AQUÍ ESTÁ LA MODIFICACIÓN: Botón Eliminar añadido al lado del select -->
+        <div style="display: flex; gap: 8px;">
+          <select id="adminMatSelect" onchange="loadAdminData()"></select>
+          <button class="small" style="background: var(--danger);" onclick="deleteMateria()">Eliminar</button>
+        </div>
 
         <div class="loc-box">
           <div class="loc-row">
