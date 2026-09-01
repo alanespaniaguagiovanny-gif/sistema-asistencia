@@ -302,5 +302,42 @@ async function exportExcel(){
   XLSX.writeFile(wb, 'asistencia_'+materia.replace(/\s+/g,'_')+'.xlsx');
 }
 
+// === NUEVA FUNCIÓN PARA ELIMINAR MATERIA ===
+async function deleteMateria(){
+  const materia = document.getElementById('adminMatSelect').value;
+  if(!materia) return;
+  
+  // 1. Pedimos confirmación al usuario por seguridad
+  const confirmacion = confirm(`¿Estás completamente seguro de eliminar la materia "${materia}"?\nEsto borrará su hoja de Excel y toda la asistencia registrada. Esta acción NO se puede deshacer.`);
+  
+  if(confirmacion){
+    // Cambiamos el texto para que el usuario sepa que está cargando
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = "Borrando...";
+    btn.disabled = true;
+
+    try {
+      // 2. Le mandamos la orden al puente de Google Apps Script para que borre la pestaña del Excel
+      await storeDelete('materia:' + materia);
+      
+      // 3. También debemos borrar el nombre de la materia de la lista interna del sistema
+      let materias = await getMaterias();
+      materias = materias.filter(m => m !== materia);
+      await storeSet('materias', materias);
+      
+      // 4. Recargamos la interfaz
+      alert(`La materia "${materia}" ha sido eliminada con éxito.`);
+      await loadMateriasIntoAdminSelect();
+    } catch (e) {
+      alert("Hubo un error al eliminar la materia.");
+    } finally {
+      // 5. Restauramos el botón
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  }
+}
+
 loadMateriasIntoSelect();
 document.getElementById('adminDate') && (document.getElementById('adminDate').value = todayStr());
