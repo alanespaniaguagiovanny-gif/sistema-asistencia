@@ -52,3 +52,17 @@ async function storeDelete(key) {
     return false;
   }
 }
+
+async function verifyAdminPin(pinToTest) {
+  try {
+    const response = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'verifyPin', value: pinToTest })
+    });
+    const result = await response.json();
+    return result.success; 
+  } catch (e) {
+    console.error("Error validando PIN:", e);
+    return false;
+  }
+}
