@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registro de Asistencia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!-- Aquí conectamos tu diseño -->
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="seal"><span>CA</span></div>
+    <div class="brand-text">
+      <h1>Registro de Asistencia</h1>
+      <p>Marca tu presencia en segundos</p>
+    </div>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" id="tabEst" onclick="switchTab('estudiante')">Estudiante</button>
+  <button class="tab" id="tabDoc" onclick="switchTab('docente')">Docente</button>
+</div>
+
+<div id="storageWarning" class="hidden">
+  Modo de prueba: no se detectó guardado permanente en este navegador.
+</div>
+
+<main>
+  <!-- ESTUDIANTE -->
+  <div id="viewEstudiante">
+    <div class="card" id="stepIdentify">
+      <h2>Identifícate</h2>
+      <p class="lede">Elige tu materia e ingresa tu código para continuar.</p>
+      <label>Materia</label>
+      <select id="matSelect"></select>
+      <div id="noMateriasMsg" class="msg warn hidden">El docente aún no registró materias.</div>
+      <label>Código SIS</label>
+      <input id="ciisInput" placeholder="Ej: 20231234" autocomplete="off">
+      <button class="primary" onclick="identifyStudent()">Continuar</button>
+      <div id="identifyMsg"></div>
+    </div>
+
+    <div class="card hidden" id="stepRegister">
+      <h2>Primer registro</h2>
+      <p class="lede">No encontramos tu código. Completa tus datos una sola vez.</p>
+      <label>Nombre completo</label>
+      <input id="nombreInput" placeholder="Nombres y apellidos">
+      <button class="primary gold" onclick="registerStudent()">Registrarme y marcar asistencia</button>
+      <span class="link" onclick="backToIdentify()">Volver</span>
+    </div>
+
+    <div class="card hidden" id="stepMark">
+      <div class="welcome-block">
+        <div class="welcome-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <div>
+          <p class="sub">Bienvenido/a</p>
+          <p class="name-big" id="welcomeName"></p>
+          <p class="sub" id="welcomeMateria"></p>
+        </div>
+      </div>
+      <button class="primary gold" onclick="markAttendance()">Marcar asistencia de hoy</button>
+      <span class="link" onclick="backToIdentify()">No soy yo / cambiar</span>
+      <div id="markMsg"></div>
+    </div>
+  </div>
+
+  <!-- DOCENTE -->
+  <div id="viewDocente" class="hidden">
+    <div class="card" id="pinCard">
+      <h2>Acceso docente</h2>
+      <p class="lede">Ingresa el PIN para administrar (por defecto: 0000).</p>
+      <input id="pinInput" type="password" placeholder="PIN">
+      <button class="primary" onclick="checkPin()">Ingresar</button>
+      <div id="pinMsg"></div>
+    </div>
+
+    <div id="adminPanel" class="hidden">
+      <div class="card">
+        <h2>Materias</h2>
+        <div class="add-materia">
+          <input id="newMateria" placeholder="Nombre de nueva materia">
+          <button class="small" onclick="addMateria()">Agregar</button>
+        </div>
+        <div class="taglist" id="materiaTags"></div>
+      </div>
+
+      <div class="card">
+        <h2>Panel de asistencia</h2>
+        <label>Materia</label>
+        <select id="adminMatSelect" onchange="loadAdminData()"></select>
+
+        <div class="loc-box">
+          <div class="loc-row">
+            <div>
+              <span class="loc-title">Ubicación del aula</span>
+              <p class="sub" id="locStatus">No configurada.</p>
+            </div>
+            <button class="small" onclick="setClassroomLocation()">Usar mi ubicación</button>
+          </div>
+          <div class="loc-row">
+            <div>
+              <label style="margin:0 0 4px;">Radio permitido (metros)</label>
+              <input type="number" id="locRadio" value="60" min="15" max="300">
+            </div>
+          </div>
+          <span class="loc-remove hidden" id="locRemoveLink" onclick="removeClassroomLocation()">Quitar restricción de ubicación</span>
+        </div>
+
+        <label>Fecha</label>
+        <input type="date" id="adminDate" onchange="loadAdminData()">
+
+        <div class="summary">
+          <div class="box"><b id="sumTotal">0</b><span>Registrados</span></div>
+          <div class="box"><b id="sumAsist">0</b><span>Asistieron</span></div>
+        </div>
+
+        <div class="table-scroll">
+          <table id="adminTable">
+            <thead><tr id="adminThead"></tr></thead>
+            <tbody id="adminTbody"></tbody>
+          </table>
+        </div>
+        <div id="adminEmptyMsg" class="msg warn hidden">No hay estudiantes registrados.</div>
+        <button class="secondary" onclick="exportExcel()">Exportar historial a Excel (.xlsx)</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>Sistema de asistencia - Modularizado</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Aquí conectamos tu lógica -->
+<script src="js/app.js"></script>
+</body>
+</html>
