@@ -10,72 +10,10 @@ function nowTime(){
   return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
 }
 
-let memoryStore = {};
-let persistentOk = null;
-
-async function checkStorage(){
-  if(persistentOk !== null) return persistentOk;
-  try{
-    if(window.storage && typeof window.storage.set === 'function'){
-      await window.storage.set('__ping__', '1', true);
-      await window.storage.get('__ping__', true);
-      persistentOk = true;
-    }else{
-      persistentOk = false;
-    }
-  }catch(e){
-    persistentOk = false;
-  }
-  if(!persistentOk){
-    document.getElementById('storageWarning').classList.remove('hidden');
-  }
-  return persistentOk;
-}
-
-async function storeGet(key){
-  const ok = await checkStorage();
-  if(!ok) return memoryStore[key] !== undefined ? JSON.parse(memoryStore[key]) : null;
-  try{
-    const r = await window.storage.get(key, true);
-    return r ? JSON.parse(r.value) : null;
-  }catch(e){ return null; }
-}
-async function storeSet(key, value){
-  const ok = await checkStorage();
-  if(!ok){
-    memoryStore[key] = JSON.stringify(value);
-    return true;
-  }
-  try{
-    await window.storage.set(key, JSON.stringify(value), true);
-    return true;
-  }catch(e){
-    memoryStore[key] = JSON.stringify(value);
-    return true;
-  }
-}
-async function storeListKeys(prefix){
-  const ok = await checkStorage();
-  if(!ok) return Object.keys(memoryStore).filter(k=>k.startsWith(prefix));
-  try{
-    const r = await window.storage.list(prefix, true);
-    return r ? r.keys : [];
-  }catch(e){ return []; }
-}
-async function storeDelete(key){
-  const ok = await checkStorage();
-  if(!ok){
-    delete memoryStore[key];
-    return true;
-  }
-  try{
-    await window.storage.delete(key, true);
-    return true;
-  }catch(e){
-    delete memoryStore[key];
-    return true;
-  }
-}
+// ---------------------------------------------------------
+// NOTA: Las funciones storeGet, storeSet, storeListKeys y 
+// storeDelete ahora viven en js/db.js (conectado a Google Sheets)
+// ---------------------------------------------------------
 
 function getPosition(){
   return new Promise((resolve, reject)=>{
@@ -85,6 +23,7 @@ function getPosition(){
     });
   });
 }
+
 function distanciaMetros(lat1, lon1, lat2, lon2){
   const R = 6371000;
   const toRad = x => x * Math.PI / 180;
@@ -110,6 +49,7 @@ async function setClassroomLocation(){
     status.textContent = 'No pudimos obtener tu ubicación.';
   }
 }
+
 async function removeClassroomLocation(){
   const materia = document.getElementById('adminMatSelect').value;
   if(!materia) return;
@@ -117,6 +57,7 @@ async function removeClassroomLocation(){
   document.getElementById('locStatus').textContent = 'No configurada.';
   document.getElementById('locRemoveLink').classList.add('hidden');
 }
+
 async function loadLocationStatus(materia){
   const status = document.getElementById('locStatus');
   const ubic = await storeGet('ubicacion:'+materia);
@@ -142,6 +83,7 @@ function switchTab(tab){
 async function getMaterias(){
   return (await storeGet('materias')) || [];
 }
+
 async function loadMateriasIntoSelect(){
   const materias = await getMaterias();
   const sel = document.getElementById('matSelect');
@@ -153,6 +95,7 @@ async function loadMateriasIntoSelect(){
     sel.appendChild(opt);
   });
 }
+
 async function loadMateriasIntoAdminSelect(){
   const materias = await getMaterias();
   const sel = document.getElementById('adminMatSelect');
@@ -166,6 +109,7 @@ async function loadMateriasIntoAdminSelect(){
   if(!document.getElementById('adminDate').value) document.getElementById('adminDate').value = todayStr();
   if(materias.length>0) loadAdminData();
 }
+
 function renderMateriaTags(materias){
   const box = document.getElementById('materiaTags');
   box.innerHTML = materias.length ? '' : '<span class="sub">Aún no agregaste materias.</span>';
@@ -176,6 +120,7 @@ function renderMateriaTags(materias){
     box.appendChild(t);
   });
 }
+
 async function addMateria(){
   const input = document.getElementById('newMateria');
   const name = input.value.trim();
