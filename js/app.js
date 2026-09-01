@@ -70,6 +70,31 @@ async function loadLocationStatus(materia){
   }
 }
 
+// === NUEVA FUNCIÓN: ACTUALIZAR SOLO EL RADIO ===
+async function updateRadius(){
+  const materia = document.getElementById('adminMatSelect').value;
+  if(!materia) return;
+  
+  let radio = parseInt(document.getElementById('locRadio').value, 10);
+  
+  // Protección contra números muy bajos por la limitación física del GPS
+  if(radio < 15) {
+    alert("El radio mínimo recomendado es de 15 metros. Los sensores GPS de los celulares tienen un margen de error natural; si pones menos, el sistema rechazará a los estudiantes aunque estén dentro del aula.");
+    radio = 15;
+    document.getElementById('locRadio').value = 15;
+  }
+  
+  // Buscamos si ya hay una ubicación guardada para esta materia
+  const ubicacion = await storeGet('ubicacion:'+materia);
+  if(ubicacion){
+    // Actualizamos solo el radio y guardamos
+    ubicacion.radio = radio;
+    await storeSet('ubicacion:'+materia, ubicacion);
+    document.getElementById('locStatus').textContent = `Configurada ✓ (radio: ${radio} m).`;
+  }
+}
+// ==============================================
+
 function switchTab(tab){
   document.getElementById('tabEst').classList.toggle('active', tab==='estudiante');
   document.getElementById('tabDoc').classList.toggle('active', tab==='docente');
