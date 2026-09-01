@@ -63,7 +63,7 @@
         </div>
       </div>
       <button class="primary gold" onclick="markAttendance()">Marcar asistencia de hoy</button>
-      <span class="link" onclick="backToIdentify()">No soy yo / cambiar</span>
+      <span class="link" onclick="backToIdentify()">Salir</span>
       <div id="markMsg"></div>
     </div>
   </div>
@@ -109,7 +109,7 @@
           <div class="loc-row">
             <div>
               <label style="margin:0 0 4px;">Radio permitido (metros)</label>
-              <input type="number" id="locRadio" value="60" min="15" max="300">
+              <input type="number" id="locRadio" value="60" min="0.1" max="300">
             </div>
           </div>
           <span class="loc-remove hidden" id="locRemoveLink" onclick="removeClassroomLocation()">Quitar restricción de ubicación</span>
