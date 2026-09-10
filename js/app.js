@@ -10,8 +10,20 @@ function nowTime(){
 }
 
 // ---------------------------------------------------------
-// NOTA: Las funciones storeGet, storeSet, storeListKeys, 
-// storeDelete y verifyAdminPin viven en js/db.js
+// NOTA: Las funciones storeGet, storeSet, storeGetByPrefix,
+// storeListKeys, storeDelete, storeDeleteByPrefix y
+// verifyAdminPin viven en js/db.js
+//
+// ESQUEMA DE LLAVES (actualizado para evitar pérdida de datos):
+//   materias                                -> lista de nombres de materias
+//   alumno:{materia}:{ciis}                 -> {nombre, registrado}
+//   asistencia:{materia}:{fecha}:{ciis}     -> {nombre, hora}
+//   ubicacion:{materia}                     -> {lat, lng, radio}
+//
+// Antes, "alumnos" y "asistencia" de un día se guardaban como UNA sola
+// lista compartida. Eso provocaba que, si dos alumnos marcaban asistencia
+// casi al mismo tiempo, uno de los dos "desaparecía" (se sobreescribían).
+// Ahora cada alumno tiene su propio documento, así nunca se pisan entre sí.
 // ---------------------------------------------------------
 
 function getPosition(){
@@ -70,30 +82,25 @@ async function loadLocationStatus(materia){
   }
 }
 
-// === NUEVA FUNCIÓN: ACTUALIZAR SOLO EL RADIO ===
 async function updateRadius(){
   const materia = document.getElementById('adminMatSelect').value;
   if(!materia) return;
-  
+
   let radio = parseInt(document.getElementById('locRadio').value, 10);
-  
-  // Protección contra números muy bajos por la limitación física del GPS
+
   if(radio < 15) {
     alert("El radio mínimo recomendado es de 15 metros. Los sensores GPS de los celulares tienen un margen de error natural; si pones menos, el sistema rechazará a los estudiantes aunque estén dentro del aula.");
     radio = 15;
     document.getElementById('locRadio').value = 15;
   }
-  
-  // Buscamos si ya hay una ubicación guardada para esta materia
+
   const ubicacion = await storeGet('ubicacion:'+materia);
   if(ubicacion){
-    // Actualizamos solo el radio y guardamos
     ubicacion.radio = radio;
     await storeSet('ubicacion:'+materia, ubicacion);
     document.getElementById('locStatus').textContent = `Configurada ✓ (radio: ${radio} m).`;
   }
 }
-// ==============================================
 
 function switchTab(tab){
   document.getElementById('tabEst').classList.toggle('active', tab==='estudiante');
@@ -149,6 +156,12 @@ async function addMateria(){
   const input = document.getElementById('newMateria');
   const name = input.value.trim();
   if(!name) return;
+  // El símbolo ":" se usa internamente para separar materia/alumno/fecha,
+  // así que no se permite en el nombre para no romper el sistema.
+  if(name.includes(':')){
+    alert('El nombre de la materia no puede contener el símbolo ":".');
+    return;
+  }
   try{
     const materias = await getMaterias();
     if(materias.includes(name)){ input.value=''; return; }
@@ -176,9 +189,9 @@ async function identifyStudent(){
   msg.innerHTML = '';
   if(!materia){ msg.innerHTML = '<div class="msg warn">Selecciona una materia.</div>'; return; }
   if(!ciis){ msg.innerHTML = '<div class="msg warn">Ingresa tu código SIS.</div>'; return; }
+  if(ciis.includes(':')){ msg.innerHTML = '<div class="msg warn">El código SIS no puede contener el símbolo ":".</div>'; return; }
 
-  const alumnos = (await storeGet('alumnos:'+materia)) || [];
-  const found = alumnos.find(a=>a.ciis === ciis);
+  const found = await storeGet('alumno:'+materia+':'+ciis);
 
   if(found){
     currentStudent = {materia, ciis, nombre: found.nombre};
@@ -194,9 +207,7 @@ async function registerStudent(){
   const nombre = document.getElementById('nombreInput').value.trim();
   if(!nombre) return;
   const {materia, ciis} = currentStudent;
-  const alumnos = (await storeGet('alumnos:'+materia)) || [];
-  alumnos.push({ciis, nombre, registrado: todayStr()});
-  await storeSet('alumnos:'+materia, alumnos);
+  await storeSet('alumno:'+materia+':'+ciis, {nombre, registrado: todayStr()});
   currentStudent.nombre = nombre;
   document.getElementById('stepRegister').classList.add('hidden');
   showMarkStep();
@@ -232,30 +243,32 @@ async function markAttendance(){
     }
   }
 
-  const key = 'asistencia:'+materia+':'+todayStr();
-  const lista = (await storeGet(key)) || [];
-  const already = lista.find(a=>a.ciis===ciis);
+  // Cada alumno tiene su propio documento de asistencia para el día de hoy,
+  // por lo que dos alumnos marcando al mismo tiempo NUNCA se pisan entre sí.
+  const key = 'asistencia:'+materia+':'+todayStr()+':'+ciis;
+  const already = await storeGet(key);
   if(already){
     msg.innerHTML = '<div class="msg warn">Ya marcaste asistencia hoy a las '+already.hora+'.</div>';
     return;
   }
-  lista.push({ciis, nombre, hora: nowTime()});
-  await storeSet(key, lista);
-  msg.innerHTML = '<div class="msg ok">Asistencia registrada a las '+nowTime()+'.</div>';
+  const hora = nowTime();
+  const ok = await storeSet(key, {nombre, hora});
+  if(ok){
+    msg.innerHTML = '<div class="msg ok">Asistencia registrada a las '+hora+'.</div>';
+  }else{
+    msg.innerHTML = '<div class="msg err">No pudimos guardar tu asistencia. Revisa tu conexión a internet e intenta de nuevo.</div>';
+  }
 }
 
-// === FUNCIÓN DE SEGURIDAD ACTUALIZADA ===
 async function checkPin(){
   const val = document.getElementById('pinInput').value;
   const msg = document.getElementById('pinMsg');
   const btn = event.target;
-  
-  // Efecto visual de carga mientras le preguntamos a Google
+
   const originalText = btn.textContent;
   btn.textContent = "Verificando...";
   btn.disabled = true;
 
-  // Le enviamos el PIN a Google Apps Script para que lo valide
   const isValid = await verifyAdminPin(val);
 
   if(isValid){
@@ -265,8 +278,7 @@ async function checkPin(){
   }else{
     msg.innerHTML = '<div class="msg err">PIN incorrecto.</div>';
   }
-  
-  // Restauramos el botón
+
   btn.textContent = originalText;
   btn.disabled = false;
 }
@@ -282,14 +294,28 @@ async function loadAdminData(){
   const fechaSel = document.getElementById('adminDate').value || todayStr();
   if(!materia) return;
 
-  const alumnos = (await storeGet('alumnos:'+materia)) || [];
-  const asistKeys = await storeListKeys('asistencia:'+materia+':');
-  const fechas = asistKeys.map(k=>k.split(':').pop()).sort();
+  // Traemos todos los alumnos de la materia en una sola consulta
+  const alumnosDocs = await storeGetByPrefix('alumno:'+materia+':');
+  const alumnos = alumnosDocs.map(d=>({
+    ciis: d.key.split(':')[2],
+    nombre: d.data.nombre,
+    registrado: d.data.registrado
+  })).sort((a,b)=> a.nombre.localeCompare(b.nombre));
 
-  const asistPorFecha = {};
-  for(const f of fechas) asistPorFecha[f] = (await storeGet('asistencia:'+materia+':'+f)) || [];
+  // Traemos TODA la asistencia de la materia (todos los días) en una sola consulta
+  // Llave: asistencia:{materia}:{fecha}:{ciis}
+  const asistDocs = await storeGetByPrefix('asistencia:'+materia+':');
+  const asistPorFecha = {}; // { "2026-09-09": { "12345": {nombre, hora} } }
+  asistDocs.forEach(d=>{
+    const parts = d.key.split(':');
+    const fecha = parts[2];
+    const ciis = parts[3];
+    if(!asistPorFecha[fecha]) asistPorFecha[fecha] = {};
+    asistPorFecha[fecha][ciis] = d.data;
+  });
+  const fechas = Object.keys(asistPorFecha).sort();
 
-  const asistenciaSeleccionada = asistPorFecha[fechaSel] || (await storeGet('asistencia:'+materia+':'+fechaSel)) || [];
+  const asistenciaSeleccionada = asistPorFecha[fechaSel] ? Object.keys(asistPorFecha[fechaSel]) : [];
   document.getElementById('sumTotal').textContent = alumnos.length;
   document.getElementById('sumAsist').textContent = asistenciaSeleccionada.length;
 
@@ -307,7 +333,7 @@ async function loadAdminData(){
     const tr = document.createElement('tr');
     let cells = '<td class="name-col">'+a.nombre+'</td><td>'+a.ciis+'</td>';
     fechas.forEach(f=>{
-      const found = asistPorFecha[f].find(x=>x.ciis===a.ciis);
+      const found = asistPorFecha[f][a.ciis];
       if(found) cells += '<td><span class="badge si">Sí</span><span class="hora-mini">'+found.hora+'</span></td>';
       else cells += '<td><span class="badge no">No</span></td>';
     });
@@ -319,17 +345,29 @@ async function loadAdminData(){
 async function exportExcel(){
   const materia = document.getElementById('adminMatSelect').value;
   if(!materia) return;
-  const alumnos = (await storeGet('alumnos:'+materia)) || [];
-  const asistKeys = await storeListKeys('asistencia:'+materia+':');
-  const fechas = asistKeys.map(k=>k.split(':').pop()).sort();
+
+  const alumnosDocs = await storeGetByPrefix('alumno:'+materia+':');
+  const alumnos = alumnosDocs.map(d=>({
+    ciis: d.key.split(':')[2],
+    nombre: d.data.nombre
+  })).sort((a,b)=> a.nombre.localeCompare(b.nombre));
+
+  const asistDocs = await storeGetByPrefix('asistencia:'+materia+':');
   const asistPorFecha = {};
-  for(const f of fechas) asistPorFecha[f] = (await storeGet('asistencia:'+materia+':'+f)) || [];
+  asistDocs.forEach(d=>{
+    const parts = d.key.split(':');
+    const fecha = parts[2];
+    const ciis = parts[3];
+    if(!asistPorFecha[fecha]) asistPorFecha[fecha] = {};
+    asistPorFecha[fecha][ciis] = d.data;
+  });
+  const fechas = Object.keys(asistPorFecha).sort();
 
   const header = ['Nombre completo','SIS', ...fechas.map(formatFechaCorta)];
   const rows = alumnos.map(a=>{
     const row = [a.nombre, a.ciis];
     fechas.forEach(f=>{
-      const found = asistPorFecha[f].find(x=>x.ciis===a.ciis);
+      const found = asistPorFecha[f][a.ciis];
       row.push(found ? ('Sí '+found.hora) : 'No');
     });
     return row;
@@ -344,9 +382,9 @@ async function exportExcel(){
 async function deleteMateria(){
   const materia = document.getElementById('adminMatSelect').value;
   if(!materia) return;
-  
-  const confirmacion = confirm(`¿Estás completamente seguro de eliminar la materia "${materia}"?\nEsto borrará su hoja de Excel y toda la asistencia registrada. Esta acción NO se puede deshacer.`);
-  
+
+  const confirmacion = confirm(`¿Estás completamente seguro de eliminar la materia "${materia}"?\nEsto borrará a todos sus estudiantes registrados y toda su asistencia guardada. Esta acción NO se puede deshacer.`);
+
   if(confirmacion){
     const btn = event.target;
     const originalText = btn.textContent;
@@ -354,12 +392,15 @@ async function deleteMateria(){
     btn.disabled = true;
 
     try {
-      await storeDelete('materia:' + materia);
-      
+      // Ahora sí se borran de verdad todos los datos asociados a la materia
+      await storeDeleteByPrefix('alumno:'+materia+':');
+      await storeDeleteByPrefix('asistencia:'+materia+':');
+      await storeDelete('ubicacion:'+materia);
+
       let materias = await getMaterias();
       materias = materias.filter(m => m !== materia);
       await storeSet('materias', materias);
-      
+
       alert(`La materia "${materia}" ha sido eliminada con éxito.`);
       await loadMateriasIntoAdminSelect();
     } catch (e) {
@@ -368,6 +409,68 @@ async function deleteMateria(){
       btn.textContent = originalText;
       btn.disabled = false;
     }
+  }
+}
+
+// ================================================================
+// MIGRACIÓN ÚNICA: convierte los datos guardados con el esquema
+// VIEJO (una lista compartida por materia/día) al esquema NUEVO
+// (un documento por alumno y por registro de asistencia).
+//
+// Es SEGURO hacer clic en el botón de migración más de una vez:
+// si ya no queda nada en el formato viejo, simplemente no hace nada.
+//
+// Si tu sistema es nuevo y todavía no tiene alumnos guardados,
+// puedes ignorar este botón sin problema.
+// ================================================================
+async function migrarDatosAntiguos(){
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.textContent = "Migrando...";
+  btn.disabled = true;
+
+  try{
+    const materias = await getMaterias();
+    let totalAlumnos = 0;
+    let totalAsistencias = 0;
+
+    for(const materia of materias){
+      // --- Migrar lista vieja de alumnos: "alumnos:{materia}" ---
+      const alumnosViejo = await storeGet('alumnos:'+materia);
+      if(alumnosViejo && alumnosViejo.length){
+        for(const a of alumnosViejo){
+          await storeSet('alumno:'+materia+':'+a.ciis, {nombre: a.nombre, registrado: a.registrado});
+          totalAlumnos++;
+        }
+        await storeDelete('alumnos:'+materia);
+      }
+
+      // --- Migrar listas viejas de asistencia: "asistencia:{materia}:{fecha}" ---
+      const keysViejas = await storeListKeys('asistencia:'+materia+':');
+      for(const key of keysViejas){
+        const partes = key.split(':');
+        // Si ya tiene 4 partes (materia:fecha:ciis) es del esquema NUEVO, se ignora.
+        if(partes.length !== 3) continue;
+        const fecha = partes[2];
+        const listaVieja = await storeGet(key);
+        if(listaVieja && listaVieja.length){
+          for(const r of listaVieja){
+            await storeSet('asistencia:'+materia+':'+fecha+':'+r.ciis, {nombre: r.nombre, hora: r.hora});
+            totalAsistencias++;
+          }
+          await storeDelete(key);
+        }
+      }
+    }
+
+    alert('Migración completa.\nAlumnos migrados: '+totalAlumnos+'\nRegistros de asistencia migrados: '+totalAsistencias+'\n\nSi ambos números son 0, es porque no había nada del formato antiguo (o ya habías migrado antes).');
+    await loadMateriasIntoAdminSelect();
+  }catch(e){
+    console.error(e);
+    alert('Hubo un error durante la migración. Revisa la consola del navegador (F12) para más detalles.');
+  }finally{
+    btn.textContent = originalText;
+    btn.disabled = false;
   }
 }
 
