@@ -256,7 +256,7 @@ async function markAttendance(){
   if(ok){
     msg.innerHTML = '<div class="msg ok">Asistencia registrada a las '+hora+'.</div>';
   }else{
-    msg.innerHTML = '<div class="msg err">No pudimos guardar tu asistencia. Revisa tu conexión a internet e intenta de nuevo.</div>';
+    msg.innerHTML = '<div class="msg err">No pudimos guardar tu asistencia. Puede ser tu conexión a internet, o que el docente todavía no terminó de configurar el sistema. Avísale al docente si esto sigue pasando.</div>';
   }
 }
 
