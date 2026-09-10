@@ -16,23 +16,36 @@ const coll = db.collection('asistencia_db');
 // 2. URL DE GOOGLE APPS SCRIPT (Respaldo en Excel)
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwE3nIjwHuVxOktZYJjm81jcZZRjYDIxKzWD-A6qjbX-sou9unvZ7FGjafFnf8T_rGYWw/exec";
 
-// === FUNCIONES DE ESCRITURA (DOBLE ENVÍO) ===
+// === RESPALDO EN GOOGLE SHEETS ===
+// Esta función SOLO debe llamarse DESPUÉS de confirmar que el dato ya quedó
+// guardado (o borrado) correctamente en Firestore. Se ejecuta "en segundo
+// plano" (no se espera su resultado) para no hacer esperar al estudiante o
+// al docente; si falla, solo queda registrado en la consola, pero el dato
+// real ya está a salvo en Firestore de todas formas.
+function respaldarEnSheets(body) {
+  fetch(SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify(body)
+  }).catch(e => console.error("Error en respaldo Sheets:", e));
+}
+
+// === FUNCIONES DE ESCRITURA (BASE DE DATOS PRIMERO, LUEGO HOJA) ===
 async function storeSet(key, value) {
   try {
-    // 1. Guardado ultra rápido en Firebase (Milisegundos)
+    // 1. PRIMERO guardamos en Firestore, la base de datos real de la app.
+    //    Si esta línea falla (por ejemplo, por reglas de seguridad o sin
+    //    internet), el "catch" de abajo se activa y NUNCA llegamos a
+    //    intentar mandar nada a la hoja de cálculo.
     await coll.doc(key).set({ data: value });
-
-    // 2. Envío silencioso a Google Sheets (No hace esperar a la página web)
-    fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'set', key: key, value: value })
-    }).catch(e => console.error("Error en respaldo Sheets:", e));
-
-    return true;
   } catch (e) {
     console.error("Error en Firebase:", e);
     return false;
   }
+
+  // 2. SOLO si el paso anterior tuvo éxito, mandamos una copia a Sheets.
+  respaldarEnSheets({ action: 'set', key: key, value: value });
+
+  return true;
 }
 
 async function storeGet(key) {
@@ -87,20 +100,17 @@ async function storeGetByPrefix(prefix) {
 
 async function storeDelete(key) {
   try {
-    // 1. Borrado instantáneo en Firebase
+    // 1. PRIMERO borramos de Firestore.
     await coll.doc(key).delete();
-
-    // 2. Borrado silencioso en Google Sheets
-    fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'delete', key: key })
-    }).catch(e => console.error("Error borrando en Sheets:", e));
-
-    return true;
   } catch (e) {
     console.error("Error borrando:", e);
     return false;
   }
+
+  // 2. SOLO si el paso anterior tuvo éxito, replicamos el borrado en Sheets.
+  respaldarEnSheets({ action: 'delete', key: key });
+
+  return true;
 }
 
 // === NUEVO: borrar TODOS los documentos cuyo identificador empieza con "prefix" ===
@@ -124,12 +134,10 @@ async function storeDeleteByPrefix(prefix) {
       await batch.commit();
     }
 
-    // Respaldo: intentamos borrar también en Sheets (mejor esfuerzo)
+    // Respaldo: SOLO después de que Firestore ya borró todo con éxito,
+    // replicamos cada borrado en Sheets (mejor esfuerzo).
     docs.forEach(doc => {
-      fetch(SCRIPT_URL, {
-        method: 'POST',
-        body: JSON.stringify({ action: 'delete', key: doc.id })
-      }).catch(e => console.error("Error en respaldo Sheets:", e));
+      respaldarEnSheets({ action: 'delete', key: doc.id });
     });
 
     return true;
