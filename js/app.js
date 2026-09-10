@@ -35,6 +35,21 @@ function getPosition(){
   });
 }
 
+// Traduce los errores de geolocalización del navegador a un mensaje claro.
+// Códigos estándar: 1 = permiso denegado, 2 = posición no disponible, 3 = tiempo agotado.
+function mensajeErrorUbicacion(e){
+  if(e && e.code === 1){
+    return 'Bloqueaste el permiso de ubicación para este sitio. Actívalo desde el ícono de información/candado junto a la dirección del navegador (o en Ajustes del celular → Aplicaciones → tu navegador → Permisos → Ubicación) y vuelve a intentar.';
+  }
+  if(e && e.code === 2){
+    return 'No se pudo determinar tu ubicación. Verifica que el GPS/ubicación esté activado en tu dispositivo.';
+  }
+  if(e && e.code === 3){
+    return 'Tardamos demasiado en obtener tu ubicación. Sal a un espacio abierto (lejos de paredes gruesas o techos) e intenta de nuevo.';
+  }
+  return 'No pudimos obtener tu ubicación.';
+}
+
 function distanciaMetros(lat1, lon1, lat2, lon2){
   const R = 6371000;
   const toRad = x => x * Math.PI / 180;
@@ -57,7 +72,7 @@ async function setClassroomLocation(){
     status.textContent = 'Configurada ✓ (radio: '+radio+' m).';
     document.getElementById('locRemoveLink').classList.remove('hidden');
   }catch(e){
-    status.textContent = 'No pudimos obtener tu ubicación.';
+    status.textContent = mensajeErrorUbicacion(e);
   }
 }
 
@@ -227,20 +242,35 @@ async function markAttendance(){
   const msg = document.getElementById('markMsg');
 
   const ubicacion = await storeGet('ubicacion:'+materia);
-  if(ubicacion){
-    msg.innerHTML = '<div class="msg warn">Verificando tu ubicación…</div>';
-    let pos;
-    try{
-      pos = await getPosition();
-    }catch(e){
-      msg.innerHTML = '<div class="msg err">Necesitamos acceso a tu ubicación.</div>';
-      return;
+
+  // Si el docente todavía no activó la ubicación del aula, NO se toma
+  // asistencia todavía. El estudiante ya quedó registrado (su nombre está
+  // guardado desde identifyStudent/registerStudent), pero la asistencia
+  // en sí solo se puede marcar una vez que el docente active la ubicación.
+  if(!ubicacion){
+    msg.innerHTML = '<div class="msg warn">Tu nombre ya está registrado. El docente todavía no activó la verificación de ubicación para esta materia, así que la asistencia se podrá marcar recién cuando la active.</div>';
+    return;
+  }
+
+  msg.innerHTML = '<div class="msg warn">Verificando tu ubicación…</div>';
+  let pos;
+  try{
+    pos = await getPosition();
+  }catch(e){
+    msg.innerHTML = '<div class="msg err">'+mensajeErrorUbicacion(e)+' <span class="link" onclick="markAttendance()">Reintentar</span></div>';
+    return;
+  }
+
+  const dist = distanciaMetros(pos.coords.latitude, pos.coords.longitude, ubicacion.lat, ubicacion.lng);
+  const precision = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : null;
+
+  if(dist > ubicacion.radio){
+    let aviso = '';
+    if(precision && precision > 30){
+      aviso = ' Tu GPS tiene poca precisión ahora mismo (margen de error de unos '+precision+' m). Sal a un espacio abierto para mejorar la señal antes de reintentar.';
     }
-    const dist = distanciaMetros(pos.coords.latitude, pos.coords.longitude, ubicacion.lat, ubicacion.lng);
-    if(dist > ubicacion.radio){
-      msg.innerHTML = '<div class="msg err">Estás a unos '+Math.round(dist)+' m. Acércate.</div>';
-      return;
-    }
+    msg.innerHTML = '<div class="msg err">Estás a unos '+Math.round(dist)+' m del aula.'+aviso+' <span class="link" onclick="markAttendance()">Reintentar</span></div>';
+    return;
   }
 
   // Cada alumno tiene su propio documento de asistencia para el día de hoy,
