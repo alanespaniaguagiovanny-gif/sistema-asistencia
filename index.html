@@ -86,12 +86,19 @@
           <button class="small" onclick="addMateria()">Agregar</button>
         </div>
         <div class="taglist" id="materiaTags"></div>
+
+        <!-- Botón temporal de migración: convierte datos guardados con el
+             formato antiguo al formato nuevo (más seguro). Es seguro hacer
+             clic más de una vez; si no hay nada que migrar, no hace nada. -->
+        <button class="secondary" style="margin-top:16px;" onclick="migrarDatosAntiguos()">
+          🔧 Migrar datos antiguos (usar una sola vez)
+        </button>
       </div>
 
       <div class="card">
         <h2>Panel de asistencia</h2>
         <label>Materia</label>
-        
+
         <!-- AQUÍ ESTÁ LA MODIFICACIÓN: Botón Eliminar añadido al lado del select -->
         <div style="display: flex; gap: 8px;">
           <select id="adminMatSelect" onchange="loadAdminData()"></select>
