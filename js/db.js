@@ -98,6 +98,22 @@ async function storeGetByPrefix(prefix) {
   }
 }
 
+// === NUEVO: escuchar cambios EN TIEMPO REAL sobre todos los documentos
+// cuyo identificador empieza con "prefix". Cada vez que algo cambia en
+// Firestore (alguien registra un nombre o marca asistencia), Firebase
+// avisa automáticamente y se ejecuta "callback" — sin que nadie tenga
+// que recargar la página. Devuelve una función para CANCELAR la escucha.
+function escucharCambiosPorPrefijo(prefix, callback) {
+  const cancelar = coll
+    .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+    .where(firebase.firestore.FieldPath.documentId(), '<=', prefix + '\uf8ff')
+    .onSnapshot(
+      () => callback(),
+      (e) => console.error('Error escuchando cambios en tiempo real:', e)
+    );
+  return cancelar;
+}
+
 async function storeDelete(key) {
   try {
     // 1. PRIMERO borramos de Firestore.
