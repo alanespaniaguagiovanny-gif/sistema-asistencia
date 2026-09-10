@@ -55,12 +55,32 @@ async function storeListKeys(prefix) {
       .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
       .where(firebase.firestore.FieldPath.documentId(), '<=', prefix + '\uf8ff')
       .get();
-    
+
     let keys = [];
     snapshot.forEach(doc => keys.push(doc.id));
     return keys;
   } catch (e) {
     console.error("Error listando llaves:", e);
+    return [];
+  }
+}
+
+// === NUEVO: leer TODOS los documentos cuyo identificador empieza con "prefix" ===
+// Esto evita tener que hacer una lectura por cada alumno/registro (más rápido
+// y consume menos "lecturas" de la cuota gratuita de Firestore).
+// Devuelve un arreglo de objetos: { key: "alumno:Materia:12345", data: {...} }
+async function storeGetByPrefix(prefix) {
+  try {
+    const snapshot = await coll
+      .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+      .where(firebase.firestore.FieldPath.documentId(), '<=', prefix + '\uf8ff')
+      .get();
+
+    const result = [];
+    snapshot.forEach(doc => result.push({ key: doc.id, data: doc.data().data }));
+    return result;
+  } catch (e) {
+    console.error("Error leyendo por prefijo:", e);
     return [];
   }
 }
@@ -83,6 +103,42 @@ async function storeDelete(key) {
   }
 }
 
+// === NUEVO: borrar TODOS los documentos cuyo identificador empieza con "prefix" ===
+// Se usa, por ejemplo, para eliminar de verdad todos los alumnos y toda la
+// asistencia de una materia cuando el docente la elimina.
+async function storeDeleteByPrefix(prefix) {
+  try {
+    const snapshot = await coll
+      .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
+      .where(firebase.firestore.FieldPath.documentId(), '<=', prefix + '\uf8ff')
+      .get();
+
+    const docs = snapshot.docs;
+
+    // Firestore solo permite borrar hasta 400-500 documentos por "lote",
+    // así que si hay más, los dividimos en grupos.
+    const chunkSize = 400;
+    for (let i = 0; i < docs.length; i += chunkSize) {
+      const batch = db.batch();
+      docs.slice(i, i + chunkSize).forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+    }
+
+    // Respaldo: intentamos borrar también en Sheets (mejor esfuerzo)
+    docs.forEach(doc => {
+      fetch(SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'delete', key: doc.id })
+      }).catch(e => console.error("Error en respaldo Sheets:", e));
+    });
+
+    return true;
+  } catch (e) {
+    console.error("Error borrando por prefijo:", e);
+    return false;
+  }
+}
+
 // === FUNCIÓN DE SEGURIDAD (MANTENIDA EN GOOGLE SHEETS) ===
 async function verifyAdminPin(pinToTest) {
   try {
@@ -91,7 +147,7 @@ async function verifyAdminPin(pinToTest) {
       body: JSON.stringify({ action: 'verifyPin', value: pinToTest })
     });
     const result = await response.json();
-    return result.success; 
+    return result.success;
   } catch (e) {
     console.error("Error validando PIN:", e);
     return false;
