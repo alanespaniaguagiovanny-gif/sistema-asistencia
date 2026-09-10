@@ -1,5 +1,11 @@
 let currentStudent = null;
 
+// Estado de los "escuchas" en tiempo real del panel docente.
+// Firestore nos avisa automáticamente cuando algo cambia, sin recargar.
+let listenerMateriaActual = null;
+let unsubAlumnosListener = null;
+let unsubAsistenciaListener = null;
+
 function todayStr(){
   const d = new Date();
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -319,10 +325,32 @@ function formatFechaCorta(f){
   return parseInt(d,10)+' '+meses[parseInt(m,10)-1];
 }
 
+// Conecta "escuchas" en tiempo real de Firestore para la materia actual.
+// Mientras el docente tenga esta materia abierta, cualquier alumno nuevo o
+// asistencia nueva refresca la tabla automáticamente, sin recargar la página.
+function activarTiempoRealParaMateria(materia){
+  if(!materia || materia === listenerMateriaActual) return; // ya conectado
+
+  // Desconectamos los escuchas de la materia anterior (si había)
+  if(unsubAlumnosListener) unsubAlumnosListener();
+  if(unsubAsistenciaListener) unsubAsistenciaListener();
+
+  listenerMateriaActual = materia;
+
+  const refrescarSiSigueActiva = () => {
+    if(document.getElementById('adminMatSelect').value === materia) loadAdminData();
+  };
+
+  unsubAlumnosListener = escucharCambiosPorPrefijo('alumno:'+materia+':', refrescarSiSigueActiva);
+  unsubAsistenciaListener = escucharCambiosPorPrefijo('asistencia:'+materia+':', refrescarSiSigueActiva);
+}
+
 async function loadAdminData(){
   const materia = document.getElementById('adminMatSelect').value;
   const fechaSel = document.getElementById('adminDate').value || todayStr();
   if(!materia) return;
+
+  activarTiempoRealParaMateria(materia);
 
   // Traemos todos los alumnos de la materia en una sola consulta
   const alumnosDocs = await storeGetByPrefix('alumno:'+materia+':');
