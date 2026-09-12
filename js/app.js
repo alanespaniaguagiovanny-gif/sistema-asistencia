@@ -451,9 +451,13 @@ async function deleteMateria(){
 
     try {
       // Ahora sí se borran de verdad todos los datos asociados a la materia
-      await storeDeleteByPrefix('alumno:'+materia+':');
-      await storeDeleteByPrefix('asistencia:'+materia+':');
+      // en Firestore. Le pasamos "false" para que NO mande un aviso de
+      // borrado a Sheets por cada alumno/registro (sería lento e inútil,
+      // ya que vamos a borrar la pestaña entera de un solo golpe abajo).
+      await storeDeleteByPrefix('alumno:'+materia+':', false);
+      await storeDeleteByPrefix('asistencia:'+materia+':', false);
       await storeDelete('ubicacion:'+materia);
+      eliminarMateriaEnHoja(materia);
 
       let materias = await getMaterias();
       materias = materias.filter(m => m !== materia);
