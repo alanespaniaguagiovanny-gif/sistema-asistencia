@@ -132,7 +132,13 @@ async function storeDelete(key) {
 // === NUEVO: borrar TODOS los documentos cuyo identificador empieza con "prefix" ===
 // Se usa, por ejemplo, para eliminar de verdad todos los alumnos y toda la
 // asistencia de una materia cuando el docente la elimina.
-async function storeDeleteByPrefix(prefix) {
+//
+// "sincronizarHoja" (true por defecto): si es false, NO se manda un aviso de
+// borrado a Google Sheets por cada documento — útil cuando de todas formas
+// vamos a borrar la pestaña ENTERA de un solo golpe justo después (ver
+// eliminarMateriaEnHoja), para no mandar cientos de peticiones inútiles.
+async function storeDeleteByPrefix(prefix, sincronizarHoja) {
+  if (sincronizarHoja === undefined) sincronizarHoja = true;
   try {
     const snapshot = await coll
       .where(firebase.firestore.FieldPath.documentId(), '>=', prefix)
@@ -150,17 +156,27 @@ async function storeDeleteByPrefix(prefix) {
       await batch.commit();
     }
 
-    // Respaldo: SOLO después de que Firestore ya borró todo con éxito,
-    // replicamos cada borrado en Sheets (mejor esfuerzo).
-    docs.forEach(doc => {
-      respaldarEnSheets({ action: 'delete', key: doc.id });
-    });
+    if (sincronizarHoja) {
+      // Respaldo: SOLO después de que Firestore ya borró todo con éxito,
+      // replicamos cada borrado en Sheets (mejor esfuerzo).
+      docs.forEach(doc => {
+        respaldarEnSheets({ action: 'delete', key: doc.id });
+      });
+    }
 
     return true;
   } catch (e) {
     console.error("Error borrando por prefijo:", e);
     return false;
   }
+}
+
+// === NUEVO: borra de un solo golpe toda la pestaña de una materia en
+// Google Sheets (alumnos + toda su asistencia). Se usa junto con
+// storeDeleteByPrefix(..., false) al eliminar una materia completa: mucho
+// más rápido que mandar un aviso de borrado por cada alumno/registro.
+function eliminarMateriaEnHoja(materia) {
+  respaldarEnSheets({ action: 'deleteMateria', materia: materia });
 }
 
 // === FUNCIÓN DE SEGURIDAD (MANTENIDA EN GOOGLE SHEETS) ===
