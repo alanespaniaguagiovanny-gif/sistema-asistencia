@@ -70,15 +70,21 @@
 
   <!-- DOCENTE -->
   <div id="viewDocente" class="hidden">
-    <div class="card" id="pinCard">
+    <div class="card" id="loginCard">
       <h2>Acceso docente</h2>
-      <p class="lede">Ingresa el PIN para administrar.</p>
-      <input id="pinInput" type="password" placeholder="PIN">
-      <button class="primary" onclick="checkPin()">Ingresar</button>
-      <div id="pinMsg"></div>
+      <p class="lede">Inicia sesión con tu cuenta de Google autorizada para administrar tus materias.</p>
+      <button class="primary" onclick="iniciarSesionDocente()">Iniciar sesión con Google</button>
+      <div id="loginMsg"></div>
     </div>
 
     <div id="adminPanel" class="hidden">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <p class="sub" id="docenteInfo"></p>
+          <span class="link" style="margin:0;" onclick="cerrarSesionDocente()">Cerrar sesión</span>
+        </div>
+      </div>
+
       <div class="card">
         <h2>Materias</h2>
         <div class="add-materia">
@@ -87,11 +93,12 @@
         </div>
         <div class="taglist" id="materiaTags"></div>
 
-        <!-- Botón temporal de migración: convierte datos guardados con el
-             formato antiguo al formato nuevo (más seguro). Es seguro hacer
-             clic más de una vez; si no hay nada que migrar, no hace nada. -->
+        <!-- Botón temporal de migración: pasa tus materias antiguas
+             (guardadas antes de tener cuentas de docente) a TU cuenta.
+             Es seguro hacer clic más de una vez; si no hay nada que
+             migrar, no hace nada. -->
         <button class="secondary" style="margin-top:16px;" onclick="migrarDatosAntiguos()">
-          🔧 Migrar datos antiguos (usar una sola vez)
+          🔧 Migrar mis materias antiguas (usar una sola vez)
         </button>
       </div>
 
@@ -109,9 +116,9 @@
           <div class="loc-row">
             <div>
               <span class="loc-title">Ubicación del aula</span>
-              <p class="sub" id="locStatus">No configurada.</p>
+              <p class="sub" id="locStatus">Desactivada.</p>
             </div>
-            <button class="small" onclick="setClassroomLocation()">Usar mi ubicación</button>
+            <button class="small" id="btnToggleUbicacion" onclick="toggleUbicacion()">Activar ubicación (usar mi ubicación actual)</button>
           </div>
           <div class="loc-row">
             <div>
@@ -119,7 +126,6 @@
               <input type="number" id="locRadio" value="60" min="15" max="300" onchange="updateRadius()">
             </div>
           </div>
-          <span class="loc-remove hidden" id="locRemoveLink" onclick="removeClassroomLocation()">Quitar restricción de ubicación</span>
         </div>
 
         <label>Fecha</label>
@@ -150,6 +156,7 @@
 <!-- Librerías de Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
 
 <script src="js/db.js"></script>
 <script src="js/app.js"></script>
