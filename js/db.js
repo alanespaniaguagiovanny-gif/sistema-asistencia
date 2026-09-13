@@ -12,6 +12,20 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const coll = db.collection('asistencia_db');
+const auth = firebase.auth();
+
+// === AUTENTICACIÓN DE DOCENTES (GOOGLE) ===
+// El acceso real (qué correos pueden entrar) se controla en las Reglas de
+// Firestore, comparando contra la lista guardada en el documento
+// "docentes_autorizados". Aquí solo se maneja el inicio/cierre de sesión.
+function iniciarSesionGoogle(){
+  const proveedor = new firebase.auth.GoogleAuthProvider();
+  return auth.signInWithPopup(proveedor);
+}
+
+function cerrarSesionGoogle(){
+  return auth.signOut();
+}
 
 // 2. URL DE GOOGLE APPS SCRIPT (Respaldo en Excel)
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwE3nIjwHuVxOktZYJjm81jcZZRjYDIxKzWD-A6qjbX-sou9unvZ7FGjafFnf8T_rGYWw/exec";
@@ -30,7 +44,11 @@ function respaldarEnSheets(body) {
 }
 
 // === FUNCIONES DE ESCRITURA (BASE DE DATOS PRIMERO, LUEGO HOJA) ===
-async function storeSet(key, value) {
+// "sincronizarHoja" (true por defecto): si es false, NO se manda copia a
+// Google Sheets — útil para datos internos que no tienen una fila/columna
+// equivalente en la hoja, como el directorio global de estudiantes por SIS.
+async function storeSet(key, value, sincronizarHoja) {
+  if (sincronizarHoja === undefined) sincronizarHoja = true;
   try {
     // 1. PRIMERO guardamos en Firestore, la base de datos real de la app.
     //    Si esta línea falla (por ejemplo, por reglas de seguridad o sin
@@ -42,8 +60,11 @@ async function storeSet(key, value) {
     return false;
   }
 
-  // 2. SOLO si el paso anterior tuvo éxito, mandamos una copia a Sheets.
-  respaldarEnSheets({ action: 'set', key: key, value: value });
+  // 2. SOLO si el paso anterior tuvo éxito, mandamos una copia a Sheets
+  //    (salvo que se haya pedido explícitamente lo contrario).
+  if (sincronizarHoja) {
+    respaldarEnSheets({ action: 'set', key: key, value: value });
+  }
 
   return true;
 }
@@ -171,12 +192,25 @@ async function storeDeleteByPrefix(prefix, sincronizarHoja) {
   }
 }
 
+// === NUEVO: crea la pestaña de una materia nueva en Google Sheets y
+// registra en la hoja "Config" el mapeo entre su ID interno y su nombre.
+function registrarMateriaEnHoja(materiaId, nombre) {
+  respaldarEnSheets({ action: 'registrarMateria', materiaId: materiaId, nombre: nombre });
+}
+
+// === NUEVO: usado SOLO por la migración — conecta un ID interno nuevo
+// con una pestaña que YA EXISTE en la hoja (creada antes de tener el
+// sistema de docentes), sin crear una pestaña duplicada.
+function vincularHojaExistente(materiaId, nombreHojaExistente) {
+  respaldarEnSheets({ action: 'vincularHojaExistente', materiaId: materiaId, nombre: nombreHojaExistente });
+}
+
 // === NUEVO: borra de un solo golpe toda la pestaña de una materia en
 // Google Sheets (alumnos + toda su asistencia). Se usa junto con
 // storeDeleteByPrefix(..., false) al eliminar una materia completa: mucho
 // más rápido que mandar un aviso de borrado por cada alumno/registro.
-function eliminarMateriaEnHoja(materia) {
-  respaldarEnSheets({ action: 'deleteMateria', materia: materia });
+function eliminarMateriaEnHoja(materiaId) {
+  respaldarEnSheets({ action: 'deleteMateria', materiaId: materiaId });
 }
 
 // === FUNCIÓN DE SEGURIDAD (MANTENIDA EN GOOGLE SHEETS) ===
