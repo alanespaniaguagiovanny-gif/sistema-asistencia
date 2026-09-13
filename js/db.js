@@ -194,8 +194,8 @@ async function storeDeleteByPrefix(prefix, sincronizarHoja) {
 
 // === NUEVO: crea la pestaña de una materia nueva en Google Sheets y
 // registra en la hoja "Config" el mapeo entre su ID interno y su nombre.
-function registrarMateriaEnHoja(materiaId, nombre) {
-  respaldarEnSheets({ action: 'registrarMateria', materiaId: materiaId, nombre: nombre });
+function registrarMateriaEnHoja(materiaId, nombre, docenteEmail) {
+  respaldarEnSheets({ action: 'registrarMateria', materiaId: materiaId, nombre: nombre, docenteEmail: docenteEmail });
 }
 
 // === NUEVO: usado SOLO por la migración — conecta un ID interno nuevo
