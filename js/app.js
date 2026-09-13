@@ -2,6 +2,7 @@ let currentStudent = null;
 
 // Estado de sesión del docente (se llena en el listener de auth, al final del archivo)
 let docenteEmail = null;
+let docenteNombre = null;
 let materiasDocenteCache = []; // [{id, nombre}, ...] de la materia del docente logueado
 let materiasGlobalCache = [];  // [{id, nombre}, ...] todas las materias, para el lado estudiante
 
@@ -207,7 +208,8 @@ async function loadMateriasIntoSelect(){
   document.getElementById('noMateriasMsg').classList.toggle('hidden', materias.length>0);
   materias.forEach(m=>{
     const opt = document.createElement('option');
-    opt.value = m.id; opt.textContent = m.nombre;
+    opt.value = m.id;
+    opt.textContent = m.docenteNombre ? (m.nombre+' — '+m.docenteNombre) : m.nombre;
     sel.appendChild(opt);
   });
 }
@@ -257,11 +259,11 @@ async function addMateria(){
     await storeSet('materias:'+docenteEmail, misMaterias, false);
 
     const materiasGlobales = (await storeGet('materias_global')) || [];
-    materiasGlobales.push({id, nombre: name});
+    materiasGlobales.push({id, nombre: name, docenteNombre: docenteNombre});
     await storeSet('materias_global', materiasGlobales, false);
 
     // Crea la pestaña correspondiente en Google Sheets
-    registrarMateriaEnHoja(id, name);
+    registrarMateriaEnHoja(id, name, docenteEmail);
 
     input.value = '';
     await loadMateriasIntoAdminSelect();
@@ -432,6 +434,7 @@ auth.onAuthStateChanged(async user => {
     }
 
     docenteEmail = user.email;
+    docenteNombre = user.displayName || user.email.split('@')[0];
     docenteInfo.textContent = 'Sesión iniciada como: '+user.email;
     loginCard.classList.add('hidden');
     adminPanel.classList.remove('hidden');
@@ -714,7 +717,7 @@ async function migrarDatosAntiguos(){
       vincularHojaExistente(id, nombreViejo);
 
       misMaterias.push({id, nombre: nombreViejo});
-      materiasGlobales.push({id, nombre: nombreViejo});
+      materiasGlobales.push({id, nombre: nombreViejo, docenteNombre: docenteNombre});
 
       // Borrar los datos viejos (ya están copiados al nuevo formato)
       await storeDeleteByPrefix('alumno:'+nombreViejo+':', false);
