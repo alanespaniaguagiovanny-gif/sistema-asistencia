@@ -104,7 +104,7 @@ function mensajeErrorUbicacion(e){
     return 'No se pudo determinar tu ubicación. Verifica que el GPS/ubicación esté activado en tu dispositivo.';
   }
   if(e && e.code === 3){
-    return 'Tardamos demasiado en obtener tu ubicación. Sal a un espacio abierto (lejos de paredes gruesas o techos) e intenta de nuevo.';
+    return 'Tardamos demasiado en obtener tu ubicación. Sal a un espacio abierto e intenta de nuevo.';
   }
   return 'No pudimos obtener tu ubicación.';
 }
@@ -141,7 +141,7 @@ async function toggleUbicacion(){
   const radio = parseInt(document.getElementById('locRadio').value, 10) || 60;
   const originalText = btn.textContent;
   btn.disabled = true;
-  status.textContent = 'Obteniendo tu ubicación (mejorando precisión, puede tardar unos segundos)...';
+  status.textContent = 'Obteniendo tu ubicación...';
   try{
     const pos = await getPosition();
     const precision = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : 0;
@@ -166,8 +166,8 @@ async function loadLocationStatus(materia){
     document.getElementById('locRadio').value = ubic.radio;
     btn.textContent = 'Desactivar ubicación';
   }else{
-    status.textContent = 'Desactivada. Mientras esté así, solo se registra el nombre del estudiante, no se toma asistencia.';
-    btn.textContent = 'Activar ubicación (usar mi ubicación actual)';
+    status.textContent = 'Desactivada.';
+    btn.textContent = 'Activar ubicación';
   }
 }
 
