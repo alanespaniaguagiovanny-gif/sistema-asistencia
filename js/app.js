@@ -373,7 +373,7 @@ async function registrarUnaMateria(materiaId, materiaNombre, btn){
   btn.textContent = 'Registrando...';
 
   const {ciis, nombre} = registroTemp;
-  await storeSet('alumno:'+materiaId+':'+ciis, {nombre, registrado: todayStr()});
+  const okAlumno = await storeSet('alumno:'+materiaId+':'+ciis, {nombre, registrado: todayStr()});
 
   let inscripciones = (await storeGet('inscripciones:'+ciis)) || [];
   if(!inscripciones.find(i=>i.materiaId===materiaId)){
@@ -381,9 +381,16 @@ async function registrarUnaMateria(materiaId, materiaNombre, btn){
   }
   // Directorio de inscripciones del alumno: para que la próxima vez que
   // ponga su código, veamos directo SUS materias sin pedirle nada más.
-  await storeSet('inscripciones:'+ciis, inscripciones, false);
-  registroTemp.inscripciones = inscripciones;
+  const okInscripciones = await storeSet('inscripciones:'+ciis, inscripciones, false);
 
+  if(!okAlumno || !okInscripciones){
+    btn.disabled = false;
+    btn.textContent = materiaNombre;
+    alert('No se pudo completar el registro. Revisa tu conexión a internet e intenta de nuevo.');
+    return;
+  }
+
+  registroTemp.inscripciones = inscripciones;
   btn.textContent = materiaNombre+' — Registrado ✓';
   btn.classList.add('gold');
 }
@@ -451,20 +458,33 @@ async function retirarMateria(materiaId, materiaNombre){
 
   const ciis = registroTemp.ciis;
 
-  await storeDelete('alumno:'+materiaId+':'+ciis);
+  // Borramos su fila en la hoja del docente (nombre + SIS + toda su
+  // asistencia, que vive en la misma fila) — esto SÍ avisa a Sheets.
+  const okAlumno = await storeDelete('alumno:'+materiaId+':'+ciis);
 
-  // También borramos su propia asistencia ya marcada ahí, si la hay.
+  // También borramos su propia asistencia ya marcada ahí en Firestore, si
+  // la hay. No hace falta avisarle a Sheets por cada una: al borrar toda
+  // la fila arriba ya desaparecieron esas celdas.
   const asistDocs = await storeGetByPrefix('asistencia:'+materiaId+':');
   for(const doc of asistDocs){
     const partes = doc.key.split(':');
     if(partes[3] === ciis){
-      await storeDelete(doc.key);
+      await storeDelete(doc.key, false);
     }
   }
 
   let inscripciones = (await storeGet('inscripciones:'+ciis)) || [];
   inscripciones = inscripciones.filter(i => i.materiaId !== materiaId);
-  await storeSet('inscripciones:'+ciis, inscripciones, false);
+  const okInscripciones = await storeSet('inscripciones:'+ciis, inscripciones, false);
+
+  if(!okAlumno || !okInscripciones){
+    alert('No se pudo completar el retiro. Revisa tu conexión a internet e intenta de nuevo.');
+    // Mostramos lo que realmente quedó guardado, no lo que intentamos hacer.
+    const inscripcionesReales = (await storeGet('inscripciones:'+ciis)) || [];
+    mostrarMisMaterias(inscripcionesReales);
+    return;
+  }
+
   registroTemp.inscripciones = inscripciones;
 
   if(inscripciones.length === 0){
