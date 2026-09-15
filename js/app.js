@@ -1,19 +1,12 @@
 let currentStudent = null;
 
-// Estado de sesión del docente (se llena en el listener de auth, al final del archivo)
 let docenteEmail = null;
 let docenteNombre = null;
 let materiasDocenteCache = []; // [{id, nombre}, ...] de la materia del docente logueado
 
-// Estado temporal mientras el estudiante pasa por los pasos de
-// identificación/registro (código SIS, nombre, docente elegido, sus
-// materias ya registradas). Se limpia en backToIdentify().
 let registroTemp = null;
 
-// Genera un identificador único para una materia nueva. Como ahora puede
-// haber varios docentes usando nombres parecidos ("Cálculo I" de dos
-// personas distintas), cada materia se identifica internamente con este
-// código único (no con su nombre), para que nunca se mezclen los datos.
+
 function generarMateriaId(){
   return 'mat_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 }
@@ -23,8 +16,6 @@ function nombreDeMateria(id){
   return m ? m.nombre : id;
 }
 
-// Estado de los "escuchas" en tiempo real del panel docente.
-// Firestore nos avisa automáticamente cuando algo cambia, sin recargar.
 let listenerMateriaActual = null;
 let unsubAlumnosListener = null;
 let unsubAsistenciaListener = null;
@@ -145,7 +136,7 @@ async function toggleUbicacion(){
   const radio = parseInt(document.getElementById('locRadio').value, 10) || 60;
   const originalText = btn.textContent;
   btn.disabled = true;
-  status.textContent = 'Obteniendo tu ubicación (mejorando precisión, puede tardar unos segundos)...';
+  status.textContent = 'Obteniendo tu ubicación';
   try{
     const pos = await getPosition();
     const precision = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : 0;
@@ -170,8 +161,8 @@ async function loadLocationStatus(materia){
     document.getElementById('locRadio').value = ubic.radio;
     btn.textContent = 'Desactivar ubicación';
   }else{
-    status.textContent = 'Desactivada. Mientras esté así, solo se registra el nombre del estudiante, no se toma asistencia.';
-    btn.textContent = 'Activar ubicación (usar mi ubicación actual)';
+    status.textContent = 'Desactivada.';
+    btn.textContent = 'Activar ubicación';
   }
 }
 
@@ -182,7 +173,7 @@ async function updateRadius(){
   let radio = parseInt(document.getElementById('locRadio').value, 10);
 
   if(radio < 15) {
-    alert("El radio mínimo recomendado es de 15 metros. Los sensores GPS de los celulares tienen un margen de error natural; si pones menos, el sistema rechazará a los estudiantes aunque estén dentro del aula.");
+    alert("El radio mínimo 15 metros.");
     radio = 15;
     document.getElementById('locRadio').value = 15;
   }
