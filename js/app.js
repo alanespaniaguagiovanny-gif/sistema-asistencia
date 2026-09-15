@@ -353,61 +353,80 @@ async function mostrarMateriasDelDocente(email){
   }
 
   disponibles.forEach(m=>{
-    const label = document.createElement('label');
-    label.style.display = 'flex';
-    label.style.alignItems = 'center';
-    label.style.gap = '8px';
-    label.style.margin = '10px 0';
-    label.style.fontWeight = '500';
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.value = m.id;
-    chk.dataset.nombre = m.nombre;
-    label.appendChild(chk);
-    label.appendChild(document.createTextNode(m.nombre));
-    box.appendChild(label);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'secondary';
+    btn.style.textAlign = 'left';
+    btn.textContent = m.nombre;
+    btn.onclick = () => registrarUnaMateria(m.id, m.nombre, btn);
+    box.appendChild(btn);
   });
 
   document.getElementById('stepChooseDocente').classList.add('hidden');
   document.getElementById('stepChooseMaterias').classList.remove('hidden');
 }
 
-// Confirma el registro en todas las materias marcadas con casillas.
-async function registrarMateriasSeleccionadas(){
-  const box = document.getElementById('materiasDocenteBox');
-  const checks = box.querySelectorAll('input[type=checkbox]:checked');
-  if(checks.length === 0){ alert('Selecciona al menos una materia.'); return; }
+// Se registra al instante al tocar el botón de esa materia (sin necesidad
+// de un botón aparte de "confirmar"). El botón cambia a "Registrado ✓".
+async function registrarUnaMateria(materiaId, materiaNombre, btn){
+  btn.disabled = true;
+  btn.textContent = 'Registrando...';
 
   const {ciis, nombre} = registroTemp;
-  let inscripciones = (await storeGet('inscripciones:'+ciis)) || [];
+  await storeSet('alumno:'+materiaId+':'+ciis, {nombre, registrado: todayStr()});
 
-  for(const chk of checks){
-    const materiaId = chk.value;
-    const materiaNombre = chk.dataset.nombre;
-    await storeSet('alumno:'+materiaId+':'+ciis, {nombre, registrado: todayStr()});
-    if(!inscripciones.find(i=>i.materiaId===materiaId)){
-      inscripciones.push({materiaId, nombre: materiaNombre});
-    }
+  let inscripciones = (await storeGet('inscripciones:'+ciis)) || [];
+  if(!inscripciones.find(i=>i.materiaId===materiaId)){
+    inscripciones.push({materiaId, nombre: materiaNombre});
   }
   // Directorio de inscripciones del alumno: para que la próxima vez que
   // ponga su código, veamos directo SUS materias sin pedirle nada más.
   await storeSet('inscripciones:'+ciis, inscripciones, false);
   registroTemp.inscripciones = inscripciones;
 
-  document.getElementById('stepChooseMaterias').classList.add('hidden');
-  mostrarMisMaterias(inscripciones);
+  btn.textContent = materiaNombre+' — Registrado ✓';
+  btn.classList.add('gold');
 }
 
-// PASO 5: el estudiante ya tiene 1 o más materias registradas — elige en
-// cuál quiere marcar asistencia hoy.
+function terminarRegistroMaterias(){
+  document.getElementById('stepChooseMaterias').classList.add('hidden');
+  mostrarMisMaterias(registroTemp.inscripciones || []);
+}
+
+// PASO 5: el estudiante ya tiene 1 o más materias registradas — toca la
+// que quiere para marcar asistencia hoy, o la retira si se equivocó.
 function mostrarMisMaterias(inscripciones){
-  const sel = document.getElementById('miMateriaSelect');
-  sel.innerHTML = '';
+  const box = document.getElementById('misMateriasBox');
+  box.innerHTML = '';
+
+  if(inscripciones.length === 0){
+    box.innerHTML = '<p class="sub">No estás registrado en ninguna materia todavía.</p>';
+  }
+
   inscripciones.forEach(i=>{
-    const opt = document.createElement('option');
-    opt.value = i.materiaId;
-    opt.textContent = i.nombre;
-    sel.appendChild(opt);
+    const fila = document.createElement('div');
+    fila.style.display = 'flex';
+    fila.style.gap = '8px';
+    fila.style.margin = '10px 0';
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'primary';
+    btn.style.margin = '0';
+    btn.style.flex = '1';
+    btn.textContent = i.nombre;
+    btn.onclick = () => elegirMiMateria(i.materiaId, i.nombre);
+    fila.appendChild(btn);
+
+    const btnRetirar = document.createElement('button');
+    btnRetirar.type = 'button';
+    btnRetirar.className = 'small';
+    btnRetirar.style.background = 'var(--danger)';
+    btnRetirar.textContent = 'Retirar';
+    btnRetirar.onclick = () => retirarMateria(i.materiaId, i.nombre);
+    fila.appendChild(btnRetirar);
+
+    box.appendChild(fila);
   });
 
   document.getElementById('stepIdentify').classList.add('hidden');
@@ -417,14 +436,43 @@ function mostrarMisMaterias(inscripciones){
   document.getElementById('stepMisMaterias').classList.remove('hidden');
 }
 
-async function continuarConMiMateria(){
-  const sel = document.getElementById('miMateriaSelect');
-  const materiaId = sel.value;
-  if(!materiaId) return;
-  const materiaNombre = sel.options[sel.selectedIndex].textContent;
+function elegirMiMateria(materiaId, materiaNombre){
   currentStudent = {materia: materiaId, materiaNombre, ciis: registroTemp.ciis, nombre: registroTemp.nombre};
   document.getElementById('stepMisMaterias').classList.add('hidden');
   showMarkStep();
+}
+
+// Por si el estudiante se registró por equivocación: borra su inscripción
+// y su asistencia ya marcada en esa materia (el docente deja de verlo en
+// su lista). No afecta a las demás materias en las que esté registrado.
+async function retirarMateria(materiaId, materiaNombre){
+  const confirmar = confirm('¿Seguro que quieres retirarte de "'+materiaNombre+'"?\nSe borrará tu registro y tu asistencia marcada en esa materia. Esto no se puede deshacer.');
+  if(!confirmar) return;
+
+  const ciis = registroTemp.ciis;
+
+  await storeDelete('alumno:'+materiaId+':'+ciis);
+
+  // También borramos su propia asistencia ya marcada ahí, si la hay.
+  const asistDocs = await storeGetByPrefix('asistencia:'+materiaId+':');
+  for(const doc of asistDocs){
+    const partes = doc.key.split(':');
+    if(partes[3] === ciis){
+      await storeDelete(doc.key);
+    }
+  }
+
+  let inscripciones = (await storeGet('inscripciones:'+ciis)) || [];
+  inscripciones = inscripciones.filter(i => i.materiaId !== materiaId);
+  await storeSet('inscripciones:'+ciis, inscripciones, false);
+  registroTemp.inscripciones = inscripciones;
+
+  if(inscripciones.length === 0){
+    alert('Te retiraste de todas tus materias.');
+    backToIdentify();
+  }else{
+    mostrarMisMaterias(inscripciones);
+  }
 }
 
 // Desde "tus materias", permite volver a elegir un docente para
