@@ -14,7 +14,7 @@
 
 <header>
   <div class="brand">
-    <div class="seal"><span>CA</span></div>
+    <img src="img/logo.png" alt="Logo" class="seal-img">
     <div class="brand-text">
       <h1>Registro de Asistencia</h1>
       <p>Marca tu presencia en segundos</p>
@@ -60,18 +60,16 @@
 
     <div class="card hidden" id="stepChooseMaterias">
       <h2>Elige tus materias</h2>
-      <p class="lede">Marca la o las materias en las que te quieres registrar con este docente.</p>
+      <p class="lede">Toca cada materia en la que te quieras registrar con este docente.</p>
       <div id="materiasDocenteBox"></div>
-      <button class="primary gold" onclick="registrarMateriasSeleccionadas()">Registrar materias</button>
+      <button class="primary gold" onclick="terminarRegistroMaterias()">Listo, ver mis materias</button>
       <span class="link" onclick="backToIdentify()">Volver</span>
     </div>
 
     <div class="card hidden" id="stepMisMaterias">
       <h2>Tus materias</h2>
-      <p class="lede">Elige en cuál quieres marcar tu asistencia hoy.</p>
-      <label>Materia</label>
-      <select id="miMateriaSelect"></select>
-      <button class="primary" onclick="continuarConMiMateria()">Continuar</button>
+      <p class="lede">Toca la materia en la que quieres marcar tu asistencia hoy.</p>
+      <div id="misMateriasBox"></div>
       <span class="link" onclick="irARegistrarOtraMateria()">+ Registrarme en otra materia</span>
       <span class="link" onclick="backToIdentify()">Salir</span>
     </div>
