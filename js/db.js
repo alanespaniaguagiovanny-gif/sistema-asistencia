@@ -135,7 +135,8 @@ function escucharCambiosPorPrefijo(prefix, callback) {
   return cancelar;
 }
 
-async function storeDelete(key) {
+async function storeDelete(key, sincronizarHoja) {
+  if (sincronizarHoja === undefined) sincronizarHoja = true;
   try {
     // 1. PRIMERO borramos de Firestore.
     await coll.doc(key).delete();
@@ -145,7 +146,9 @@ async function storeDelete(key) {
   }
 
   // 2. SOLO si el paso anterior tuvo éxito, replicamos el borrado en Sheets.
-  respaldarEnSheets({ action: 'delete', key: key });
+  if (sincronizarHoja) {
+    respaldarEnSheets({ action: 'delete', key: key });
+  }
 
   return true;
 }
