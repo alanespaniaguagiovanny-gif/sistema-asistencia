@@ -126,8 +126,6 @@
       <div class="card">
         <h2>Panel de asistencia</h2>
         <label>Materia</label>
-
-        <!-- AQUÍ ESTÁ LA MODIFICACIÓN: Botón Eliminar añadido al lado del select -->
         <div style="display: flex; gap: 8px;">
           <select id="adminMatSelect" onchange="loadAdminData()"></select>
           <button class="small" style="background: var(--danger);" onclick="deleteMateria()">Eliminar</button>
@@ -139,7 +137,7 @@
               <span class="loc-title">Ubicación del aula</span>
               <p class="sub" id="locStatus">Desactivada.</p>
             </div>
-            <button class="small" id="btnToggleUbicacion" onclick="toggleUbicacion()">Activar ubicación (usar mi ubicación actual)</button>
+            <button class="small" id="btnToggleUbicacion" onclick="toggleUbicacion()">Activar ubicación </button>
           </div>
           <div class="loc-row">
             <div>
@@ -170,7 +168,7 @@
   </div>
 </main>
 
-<footer>Sistema de asistencia - Modularizado</footer>
+<footer>Sistema de asistencia - GJAP</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
