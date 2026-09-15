@@ -4,7 +4,11 @@ let currentStudent = null;
 let docenteEmail = null;
 let docenteNombre = null;
 let materiasDocenteCache = []; // [{id, nombre}, ...] de la materia del docente logueado
-let materiasGlobalCache = [];  // [{id, nombre}, ...] todas las materias, para el lado estudiante
+
+// Estado temporal mientras el estudiante pasa por los pasos de
+// identificación/registro (código SIS, nombre, docente elegido, sus
+// materias ya registradas). Se limpia en backToIdentify().
+let registroTemp = null;
 
 // Genera un identificador único para una materia nueva. Como ahora puede
 // haber varios docentes usando nombres parecidos ("Cálculo I" de dos
@@ -104,7 +108,7 @@ function mensajeErrorUbicacion(e){
     return 'No se pudo determinar tu ubicación. Verifica que el GPS/ubicación esté activado en tu dispositivo.';
   }
   if(e && e.code === 3){
-    return 'Tardamos demasiado en obtener tu ubicación. Sal a un espacio abierto e intenta de nuevo.';
+    return 'Tardamos demasiado en obtener tu ubicación. Sal a un espacio abierto (lejos de paredes gruesas o techos) e intenta de nuevo.';
   }
   return 'No pudimos obtener tu ubicación.';
 }
@@ -141,7 +145,7 @@ async function toggleUbicacion(){
   const radio = parseInt(document.getElementById('locRadio').value, 10) || 60;
   const originalText = btn.textContent;
   btn.disabled = true;
-  status.textContent = 'Obteniendo tu ubicación...';
+  status.textContent = 'Obteniendo tu ubicación (mejorando precisión, puede tardar unos segundos)...';
   try{
     const pos = await getPosition();
     const precision = pos.coords.accuracy ? Math.round(pos.coords.accuracy) : 0;
@@ -166,8 +170,8 @@ async function loadLocationStatus(materia){
     document.getElementById('locRadio').value = ubic.radio;
     btn.textContent = 'Desactivar ubicación';
   }else{
-    status.textContent = 'Desactivada.';
-    btn.textContent = 'Activar ubicación';
+    status.textContent = 'Desactivada. Mientras esté así, solo se registra el nombre del estudiante, no se toma asistencia.';
+    btn.textContent = 'Activar ubicación (usar mi ubicación actual)';
   }
 }
 
@@ -196,22 +200,8 @@ function switchTab(tab){
   document.getElementById('tabDoc').classList.toggle('active', tab==='docente');
   document.getElementById('viewEstudiante').classList.toggle('hidden', tab!=='estudiante');
   document.getElementById('viewDocente').classList.toggle('hidden', tab!=='docente');
-  if(tab==='estudiante') loadMateriasIntoSelect();
+  if(tab==='estudiante') backToIdentify();
   if(tab==='docente') loadMateriasIntoAdminSelect();
-}
-
-async function loadMateriasIntoSelect(){
-  const materias = (await storeGet('materias_global')) || [];
-  materiasGlobalCache = materias;
-  const sel = document.getElementById('matSelect');
-  sel.innerHTML = '';
-  document.getElementById('noMateriasMsg').classList.toggle('hidden', materias.length>0);
-  materias.forEach(m=>{
-    const opt = document.createElement('option');
-    opt.value = m.id;
-    opt.textContent = m.docenteNombre ? (m.nombre+' — '+m.docenteNombre) : m.nombre;
-    sel.appendChild(opt);
-  });
 }
 
 async function getMateriasDocente(){
@@ -274,60 +264,175 @@ async function addMateria(){
 
 function backToIdentify(){
   document.getElementById('stepIdentify').classList.remove('hidden');
-  document.getElementById('stepRegister').classList.add('hidden');
+  document.getElementById('stepRegisterName').classList.add('hidden');
+  document.getElementById('stepChooseDocente').classList.add('hidden');
+  document.getElementById('stepChooseMaterias').classList.add('hidden');
+  document.getElementById('stepMisMaterias').classList.add('hidden');
   document.getElementById('stepMark').classList.add('hidden');
   document.getElementById('identifyMsg').innerHTML = '';
   document.getElementById('ciisInput').value = '';
+  registroTemp = null;
 }
 
-async function identifyStudent(){
-  const sel = document.getElementById('matSelect');
-  const materia = sel.value;
-  const materiaNombre = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
+// PASO 1: el estudiante solo escribe su código SIS.
+async function identificarPorCiis(){
   const ciis = document.getElementById('ciisInput').value.trim();
   const msg = document.getElementById('identifyMsg');
   msg.innerHTML = '';
-  if(!materia){ msg.innerHTML = '<div class="msg warn">Selecciona una materia.</div>'; return; }
   if(!ciis){ msg.innerHTML = '<div class="msg warn">Ingresa tu código SIS.</div>'; return; }
   if(ciis.includes(':')){ msg.innerHTML = '<div class="msg warn">El código SIS no puede contener el símbolo ":".</div>'; return; }
 
-  const found = await storeGet('alumno:'+materia+':'+ciis);
+  const inscripciones = (await storeGet('inscripciones:'+ciis)) || [];
 
-  if(found){
-    currentStudent = {materia, materiaNombre, ciis, nombre: found.nombre};
-    showMarkStep();
+  if(inscripciones.length > 0){
+    // Ya está registrado en al menos una materia: mostramos SOLO sus materias.
+    const conocido = await storeGet('estudiante:'+ciis);
+    registroTemp = {ciis, nombre: conocido ? conocido.nombre : '', inscripciones};
+    document.getElementById('stepIdentify').classList.add('hidden');
+    mostrarMisMaterias(inscripciones);
     return;
   }
 
-  // No está inscrito todavía en ESTA materia. Como el código SIS es único
-  // por estudiante, revisamos el directorio global (estudiante:{ciis}) por
-  // si ya lo conocemos de otra materia — así no le pedimos el nombre de nuevo.
-  const conocido = await storeGet('estudiante:'+ciis);
-  if(conocido && conocido.nombre){
-    await storeSet('alumno:'+materia+':'+ciis, {nombre: conocido.nombre, registrado: todayStr()});
-    currentStudent = {materia, materiaNombre, ciis, nombre: conocido.nombre};
-    showMarkStep();
-    return;
-  }
-
-  currentStudent = {materia, materiaNombre, ciis, nombre: null};
+  // Primera vez que vemos este código: pedimos el nombre.
+  registroTemp = {ciis, nombre: null, inscripciones: []};
   document.getElementById('stepIdentify').classList.add('hidden');
-  document.getElementById('stepRegister').classList.remove('hidden');
+  document.getElementById('stepRegisterName').classList.remove('hidden');
 }
 
-async function registerStudent(){
+// PASO 2 (solo primera vez): pide el nombre completo.
+async function continuarConNombre(){
   const nombre = document.getElementById('nombreInput').value.trim();
   if(!nombre) return;
-  const {materia, ciis} = currentStudent;
-  await storeSet('alumno:'+materia+':'+ciis, {nombre, registrado: todayStr()});
-  // Guardamos también en el directorio global por SIS, para que si este
-  // mismo alumno aparece en OTRA materia más adelante, ya no tenga que
-  // volver a escribir su nombre.
-  await storeSet('estudiante:'+ciis, {nombre}, false);
-  currentStudent.nombre = nombre;
-  document.getElementById('stepRegister').classList.add('hidden');
+  registroTemp.nombre = nombre;
+  // Directorio global por SIS, para no volver a pedir el nombre nunca más.
+  await storeSet('estudiante:'+registroTemp.ciis, {nombre}, false);
+  document.getElementById('stepRegisterName').classList.add('hidden');
+  await mostrarListaDocentes();
+}
+
+// PASO 3 (solo primera vez, o si pide registrarse en otra materia): elegir docente.
+async function mostrarListaDocentes(){
+  const sel = document.getElementById('docenteSelect');
+  const docenteMsg = document.getElementById('docenteMsg');
+  sel.innerHTML = '';
+  docenteMsg.innerHTML = '';
+
+  const docentes = (await storeGet('docentes_autorizados')) || [];
+  if(docentes.length === 0){
+    docenteMsg.innerHTML = '<div class="msg warn">Todavía no hay docentes configurados.</div>';
+  }
+
+  for(const email of docentes){
+    const perfil = await storeGet('docentes_perfil:'+email);
+    const opt = document.createElement('option');
+    opt.value = email;
+    opt.textContent = (perfil && perfil.nombre) ? perfil.nombre : email;
+    sel.appendChild(opt);
+  }
+
+  document.getElementById('stepChooseDocente').classList.remove('hidden');
+}
+
+async function continuarConDocente(){
+  const email = document.getElementById('docenteSelect').value;
+  if(!email) return;
+  await mostrarMateriasDelDocente(email);
+}
+
+// PASO 4: elegir, con casillas, una o varias materias de ese docente.
+async function mostrarMateriasDelDocente(email){
+  const box = document.getElementById('materiasDocenteBox');
+  box.innerHTML = '';
+
+  const todas = (await storeGet('materias:'+email)) || [];
+  const yaInscritoEn = (registroTemp.inscripciones || []).map(i=>i.materiaId);
+  const disponibles = todas.filter(m => !yaInscritoEn.includes(m.id));
+
+  if(disponibles.length === 0){
+    box.innerHTML = '<p class="sub">'+(todas.length===0 ? 'Este docente todavía no tiene materias registradas.' : 'Ya estás registrado en todas las materias de este docente.')+'</p>';
+  }
+
+  disponibles.forEach(m=>{
+    const label = document.createElement('label');
+    label.style.display = 'flex';
+    label.style.alignItems = 'center';
+    label.style.gap = '8px';
+    label.style.margin = '10px 0';
+    label.style.fontWeight = '500';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.value = m.id;
+    chk.dataset.nombre = m.nombre;
+    label.appendChild(chk);
+    label.appendChild(document.createTextNode(m.nombre));
+    box.appendChild(label);
+  });
+
+  document.getElementById('stepChooseDocente').classList.add('hidden');
+  document.getElementById('stepChooseMaterias').classList.remove('hidden');
+}
+
+// Confirma el registro en todas las materias marcadas con casillas.
+async function registrarMateriasSeleccionadas(){
+  const box = document.getElementById('materiasDocenteBox');
+  const checks = box.querySelectorAll('input[type=checkbox]:checked');
+  if(checks.length === 0){ alert('Selecciona al menos una materia.'); return; }
+
+  const {ciis, nombre} = registroTemp;
+  let inscripciones = (await storeGet('inscripciones:'+ciis)) || [];
+
+  for(const chk of checks){
+    const materiaId = chk.value;
+    const materiaNombre = chk.dataset.nombre;
+    await storeSet('alumno:'+materiaId+':'+ciis, {nombre, registrado: todayStr()});
+    if(!inscripciones.find(i=>i.materiaId===materiaId)){
+      inscripciones.push({materiaId, nombre: materiaNombre});
+    }
+  }
+  // Directorio de inscripciones del alumno: para que la próxima vez que
+  // ponga su código, veamos directo SUS materias sin pedirle nada más.
+  await storeSet('inscripciones:'+ciis, inscripciones, false);
+  registroTemp.inscripciones = inscripciones;
+
+  document.getElementById('stepChooseMaterias').classList.add('hidden');
+  mostrarMisMaterias(inscripciones);
+}
+
+// PASO 5: el estudiante ya tiene 1 o más materias registradas — elige en
+// cuál quiere marcar asistencia hoy.
+function mostrarMisMaterias(inscripciones){
+  const sel = document.getElementById('miMateriaSelect');
+  sel.innerHTML = '';
+  inscripciones.forEach(i=>{
+    const opt = document.createElement('option');
+    opt.value = i.materiaId;
+    opt.textContent = i.nombre;
+    sel.appendChild(opt);
+  });
+
+  document.getElementById('stepIdentify').classList.add('hidden');
+  document.getElementById('stepRegisterName').classList.add('hidden');
+  document.getElementById('stepChooseDocente').classList.add('hidden');
+  document.getElementById('stepChooseMaterias').classList.add('hidden');
+  document.getElementById('stepMisMaterias').classList.remove('hidden');
+}
+
+async function continuarConMiMateria(){
+  const sel = document.getElementById('miMateriaSelect');
+  const materiaId = sel.value;
+  if(!materiaId) return;
+  const materiaNombre = sel.options[sel.selectedIndex].textContent;
+  currentStudent = {materia: materiaId, materiaNombre, ciis: registroTemp.ciis, nombre: registroTemp.nombre};
+  document.getElementById('stepMisMaterias').classList.add('hidden');
   showMarkStep();
-  markAttendance();
+}
+
+// Desde "tus materias", permite volver a elegir un docente para
+// registrarse en una materia nueva (por ejemplo, si toma una clase
+// distinta más adelante en el semestre).
+async function irARegistrarOtraMateria(){
+  document.getElementById('stepMisMaterias').classList.add('hidden');
+  await mostrarListaDocentes();
 }
 
 function showMarkStep(){
@@ -346,7 +451,7 @@ async function markAttendance(){
 
   // Si el docente todavía no activó la ubicación del aula, NO se toma
   // asistencia todavía. El estudiante ya quedó registrado (su nombre está
-  // guardado desde identifyStudent/registerStudent), pero la asistencia
+  // guardado en el paso de identificación/registro), pero la asistencia
   // en sí solo se puede marcar una vez que el docente active la ubicación.
   if(!ubicacion){
     msg.innerHTML = '<div class="msg warn">Tu nombre ya está registrado. El docente todavía no activó la verificación de ubicación para esta materia, así que la asistencia se podrá marcar recién cuando la active.</div>';
@@ -436,6 +541,9 @@ auth.onAuthStateChanged(async user => {
     docenteEmail = user.email;
     docenteNombre = user.displayName || user.email.split('@')[0];
     docenteInfo.textContent = 'Sesión iniciada como: '+user.email;
+    // Guardamos su nombre público para que los estudiantes lo vean al
+    // elegir docente (no se manda a la hoja de cálculo, es solo interno).
+    await storeSet('docentes_perfil:'+user.email, {nombre: docenteNombre}, false);
     loginCard.classList.add('hidden');
     adminPanel.classList.remove('hidden');
     await loadMateriasIntoAdminSelect();
@@ -740,5 +848,22 @@ async function migrarDatosAntiguos(){
   }
 }
 
-loadMateriasIntoSelect();
+// Permite que, en vez de hacer clic con el mouse, el usuario presione la
+// tecla Enter dentro de un campo de texto para activar el botón principal
+// de ese paso (más rápido de usar, sobre todo en el panel del docente).
+function activarEnterParaBoton(inputId, accion){
+  const el = document.getElementById(inputId);
+  if(!el) return;
+  el.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      accion();
+    }
+  });
+}
+
+activarEnterParaBoton('ciisInput', identificarPorCiis);
+activarEnterParaBoton('nombreInput', continuarConNombre);
+activarEnterParaBoton('newMateria', addMateria);
+
 document.getElementById('adminDate') && (document.getElementById('adminDate').value = todayStr());
