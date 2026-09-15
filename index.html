@@ -14,7 +14,7 @@
 
 <header>
   <div class="brand">
-    <div class="seal"><span>UMSS</span></div>
+    <div class="seal"><span>CA</span></div>
     <div class="brand-text">
       <h1>Registro de Asistencia</h1>
       <p>Marca tu presencia en segundos</p>
@@ -32,23 +32,48 @@
   <div id="viewEstudiante">
     <div class="card" id="stepIdentify">
       <h2>Identifícate</h2>
-      <p class="lede">Elige tu materia e ingresa tu código para continuar.</p>
-      <label>Materia</label>
-      <select id="matSelect"></select>
-      <div id="noMateriasMsg" class="msg warn hidden">El docente aún no registró materias.</div>
+      <p class="lede">Ingresa tu código SIS para continuar.</p>
       <label>Código SIS</label>
       <input id="ciisInput" placeholder="Ej: 20231234" autocomplete="off">
-      <button class="primary" onclick="identifyStudent()">Continuar</button>
+      <button class="primary" onclick="identificarPorCiis()">Continuar</button>
       <div id="identifyMsg"></div>
     </div>
 
-    <div class="card hidden" id="stepRegister">
+    <div class="card hidden" id="stepRegisterName">
       <h2>Primer registro</h2>
-      <p class="lede">No encontramos tu código. Completa tus datos una sola vez.</p>
+      <p class="lede">No encontramos tu código. Escribe tu nombre completo para continuar.</p>
       <label>Nombre completo</label>
       <input id="nombreInput" placeholder="Nombres y apellidos">
-      <button class="primary gold" onclick="registerStudent()">Registrarme y marcar asistencia</button>
+      <button class="primary gold" onclick="continuarConNombre()">Continuar</button>
       <span class="link" onclick="backToIdentify()">Volver</span>
+    </div>
+
+    <div class="card hidden" id="stepChooseDocente">
+      <h2>Elige tu docente</h2>
+      <p class="lede">Selecciona el docente de la materia en la que te quieres registrar.</p>
+      <label>Docente</label>
+      <select id="docenteSelect"></select>
+      <div id="docenteMsg"></div>
+      <button class="primary gold" onclick="continuarConDocente()">Continuar</button>
+      <span class="link" onclick="backToIdentify()">Volver</span>
+    </div>
+
+    <div class="card hidden" id="stepChooseMaterias">
+      <h2>Elige tus materias</h2>
+      <p class="lede">Marca la o las materias en las que te quieres registrar con este docente.</p>
+      <div id="materiasDocenteBox"></div>
+      <button class="primary gold" onclick="registrarMateriasSeleccionadas()">Registrar materias</button>
+      <span class="link" onclick="backToIdentify()">Volver</span>
+    </div>
+
+    <div class="card hidden" id="stepMisMaterias">
+      <h2>Tus materias</h2>
+      <p class="lede">Elige en cuál quieres marcar tu asistencia hoy.</p>
+      <label>Materia</label>
+      <select id="miMateriaSelect"></select>
+      <button class="primary" onclick="continuarConMiMateria()">Continuar</button>
+      <span class="link" onclick="irARegistrarOtraMateria()">+ Registrarme en otra materia</span>
+      <span class="link" onclick="backToIdentify()">Salir</span>
     </div>
 
     <div class="card hidden" id="stepMark">
@@ -118,11 +143,11 @@
               <span class="loc-title">Ubicación del aula</span>
               <p class="sub" id="locStatus">Desactivada.</p>
             </div>
-            <button class="small" id="btnToggleUbicacion" onclick="toggleUbicacion()">Activar ubicación </button>
+            <button class="small" id="btnToggleUbicacion" onclick="toggleUbicacion()">Activar ubicación (usar mi ubicación actual)</button>
           </div>
           <div class="loc-row">
             <div>
-              <label style="margin:0 0 4px;">Radio permitido</label>
+              <label style="margin:0 0 4px;">Radio permitido (metros)</label>
               <input type="number" id="locRadio" value="60" min="15" max="300" onchange="updateRadius()">
             </div>
           </div>
@@ -149,9 +174,8 @@
   </div>
 </main>
 
-<footer>Sistema de asistencia</footer>
-<footer>Creado por: Giovanny Alanes</footer>
-<footer>Para el Ing. Arturo Saramani</footer>
+<footer>Sistema de asistencia - Modularizado</footer>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <!-- Librerías de Firebase -->
